@@ -9,13 +9,17 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import requests
 
 # ===================== CONFIGURAÇÃO =====================
-URL = "https://buyticketbrasil.com/evento/harrystylestogethertogether2026?data=1784948340000&evento_local=1769181690010x821473434180517900&cidade=S%C3%A3o+Paulo"
+URL = (
+    "https://buyticketbrasil.com/evento/bts%E2%80%932026worldtourarirang"
+    "?data=1793415599000&evento_local=1775752182066x607042691407020000"
+    "&cidade=S%C3%A3o+Paulo"
+)
 
 # No Render, configure essas variáveis em Environment (não deixe hardcoded no código/git)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-PRICE_THRESHOLD_REAIS = float(os.environ.get("PRICE_THRESHOLD_REAIS", 330.0))
+PRICE_THRESHOLD_REAIS = float(os.environ.get("PRICE_THRESHOLD_REAIS", 700.0))
 CHECK_INTERVAL_SECONDS = int(os.environ.get("CHECK_INTERVAL_SECONDS", 60))
 
 # De quanto em quanto tempo o bot manda a mensagem "ainda estou rodando" (em segundos).
@@ -25,10 +29,8 @@ HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("HEARTBEAT_INTERVAL_SECONDS", 36
 # Render injeta a porta que o serviço precisa escutar nessa variável
 PORT = int(os.environ.get("PORT", 10000))
 
-# Categorias de ingresso aceitas
-ALLOWED_CATEGORIAS = {"pit circle", "pit disco", "pit square", "pit kiss"}
-
-# Tipos de ingresso aceitos (dentro das categorias acima)
+# Tipos de ingresso aceitos, em QUALQUER setor/categoria (Pista, Arquibancada,
+# Cadeira Superior, Cadeira Inferior, Camarotes, etc.)
 ALLOWED_TIPOS = {"meia estudante", "inteira"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -65,7 +67,7 @@ class _HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"Bot de ingressos rodando.")
+        self.wfile.write(b"Bot de ingressos (BTS) rodando.")
 
     def log_message(self, format, *args):
         # silencia o log de cada request HTTP (senão polui o log do bot)
@@ -80,20 +82,16 @@ def start_health_server():
 
 def is_target_key(key: str) -> bool:
     """
-    Retorna True se a 'key' (formato 'Categoria||Tipo') pertence a uma das
-    categorias em ALLOWED_CATEGORIAS (Pit Circle, Pit Disco, Pit Square,
-    Pit Kiss) E o tipo do ingresso for 'Inteira' ou 'Meia Estudante'
-    (comparação case-insensitive).
+    Retorna True se a 'key' (formato 'Categoria||Tipo') tiver o tipo do
+    ingresso igual a 'Inteira' ou 'Meia Estudante' (comparação
+    case-insensitive), não importando o setor/categoria (Pista,
+    Arquibancada, Cadeira Superior, Cadeira Inferior, Camarotes, etc.).
     """
     if "||" not in key:
         return False
 
-    categoria, tipo = key.split("||", 1)
-
-    categoria_ok = categoria.strip().lower() in ALLOWED_CATEGORIAS
-    tipo_ok = tipo.strip().lower() in ALLOWED_TIPOS
-
-    return categoria_ok and tipo_ok
+    _categoria, tipo = key.split("||", 1)
+    return tipo.strip().lower() in ALLOWED_TIPOS
 
 
 def send_hourly_status():
@@ -128,14 +126,14 @@ def send_hourly_status():
         preco_reais = cheapest_price / 100
 
         msg = (
-            "✅ <b>Bot ativo.</b>\n\n"
-            f"🎫 Menor preço encontrado (Pit Circle/Disco/Square/Kiss - Inteira/Meia Estudante):\n"
+            "✅ <b>Bot ativo (BTS).</b>\n\n"
+            f"🎫 Menor preço encontrado (qualquer setor - Inteira/Meia Estudante):\n"
             f"{cheapest_key.replace('||', ' - ')}\n"
             f"💰 R${preco_reais:.2f}\n"
             f"📦 Disponíveis: {cheapest_available}"
         )
     else:
-        msg = "✅ Bot ativo.\nNenhum ingresso Pit Circle/Disco/Square/Kiss (Inteira/Meia Estudante) encontrado."
+        msg = "✅ Bot ativo (BTS).\nNenhum ingresso Inteira/Meia Estudante encontrado."
 
     send_telegram_message(msg)
     last_heartbeat = now
@@ -210,7 +208,7 @@ def check_tickets():
             alert_key = f"{key}-{preco_centavos}"
             if alert_key not in already_alerted:
                 msg = (
-                    f"🎫 <b>Ingresso abaixo de R${PRICE_THRESHOLD_REAIS:.0f}!</b>\n"
+                    f"🎫 <b>Ingresso BTS abaixo de R${PRICE_THRESHOLD_REAIS:.0f}!</b>\n"
                     f"Tipo: {key.replace('||', ' - ')}\n"
                     f"Preço: R${preco_reais:.2f}\n"
                     f"Disponíveis: {disponivel}\n"
@@ -227,7 +225,7 @@ def main():
 
     while True:
         try:
-            send_hourly_status()   # envia status se passou 1 hora
+            send_hourly_status()   # envia status a cada HEARTBEAT_INTERVAL_SECONDS
             check_tickets()        # verifica promoções
         except Exception as e:
             log.error(f"Erro no ciclo de verificação: {e}")
