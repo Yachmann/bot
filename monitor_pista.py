@@ -13,7 +13,11 @@ URL = "https://buyticketbrasil.com/evento/harrystylestogethertogether2026?data=1
 
 # No Render, configure essas variáveis em Environment (não deixe hardcoded no código/git)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_IDS = [
+    chat_id.strip()
+    for chat_id in os.environ.get("TELEGRAM_CHAT_IDS", "").split(",")
+    if chat_id.strip()
+]
 
 PRICE_THRESHOLD_REAIS = float(os.environ.get("PRICE_THRESHOLD_REAIS", 330.0))
 CHECK_INTERVAL_SECONDS = int(os.environ.get("CHECK_INTERVAL_SECONDS", 60))
@@ -34,7 +38,7 @@ ALLOWED_TIPOS = {"meia estudante", "inteira"}
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS:
     raise RuntimeError(
         "TELEGRAM_TOKEN e/ou TELEGRAM_CHAT_ID não configurados. "
         "No Render, defina essas variáveis em Settings > Environment."
@@ -143,14 +147,24 @@ def send_hourly_status():
 
 def send_telegram_message(text: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
-    try:
-        resp = requests.post(url, data=payload, timeout=10)
-        resp.raise_for_status()
-        log.info("Mensagem enviada ao Telegram.")
-    except Exception as e:
-        log.error(f"Falha ao enviar mensagem no Telegram: {e}")
 
+    for chat_id in TELEGRAM_CHAT_IDS:
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML"
+        }
+
+        try:
+            resp = requests.post(url, data=payload, timeout=10)
+            resp.raise_for_status()
+
+            log.info(f"Mensagem enviada ao Telegram: Chat ID {chat_id}")
+
+        except Exception as e:
+            log.error(
+                f"Falha ao enviar mensagem para o Chat ID {chat_id}: {e}"
+            )
 
 def extract_balanced(text: str, start_index: int, open_ch="{", close_ch="}") -> str:
     """A partir de start_index (que deve apontar pro caractere de abertura),
